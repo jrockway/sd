@@ -1,0 +1,38 @@
+#!/usr/bin/env perl
+require Moose;
+use warnings;
+use strict;
+
+use lib '/home/jon/projects/cpan_modules/App-Persistent/lib';
+use App::Persistent::Server;
+
+use Module::Pluggable::Object;
+my $o = Module::Pluggable::Object->new( search_path => ['App::SD'] );
+for my $module ($o->plugins){
+    eval { Class::MOP::load_class($module); print "Preloaded $module\n" };
+}
+
+use App::SD::CLI;
+
+my $server = App::Persistent::Server->new(
+    code => sub {
+        my $info = shift;
+
+        # fake environment
+        local %ENV = $info->environment;
+        local $0 = $info->program_name;
+        chdir $info->working_directory;
+        local @ARGV = $info->cmdline_args;
+
+        $ENV{'PROPHET_REPO'} ||= $ENV{'SD_REPO'} || $ENV{'HOME'}.'/.sd';
+        warn "Prophet repo: ". $ENV{'PROPHET_REPO'};
+
+        my $cli = App::SD::CLI->new;
+        return $cli->run_one_command(@ARGV);
+    },
+);
+
+$server->start;
+print "Ready\n";
+
+exit $server->completion_condvar->wait;
