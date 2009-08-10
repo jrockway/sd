@@ -6,15 +6,17 @@ use strict;
 use lib '/home/jon/projects/cpan_modules/App-Persistent/lib';
 use App::Persistent::Server;
 
-use Module::Pluggable::Object;
-my $o = Module::Pluggable::Object->new( search_path => ['App::SD'] );
-for my $module ($o->plugins){
-    eval { Class::MOP::load_class($module); print "Preloaded $module\n" };
-}
+# use Module::Pluggable::Object;
+# my $o = Module::Pluggable::Object->new( search_path => ['App::SD'] );
+# for my $module ($o->plugins){
+#     eval { Class::MOP::load_class($module); print "Preloaded $module\n" };
+# }
 
-use App::SD::CLI;
+# use App::SD::CLI;
+use Term::ReadLine;
 
 my $server = App::Persistent::Server->new(
+    name => 'sd',
     code => sub {
         my $info = shift;
 
@@ -23,9 +25,31 @@ my $server = App::Persistent::Server->new(
         local $0 = $info->program_name;
         chdir $info->working_directory;
         local @ARGV = $info->cmdline_args;
+        local $| = 1;
+
+        use App::SD::CLI;
+        {
+            package Term::ReadLine;
+            use Class::Method::Modifiers;
+
+            around 'new' => sub {
+                my ($orig, $self, $name, @rest) = @_;
+                if (@rest) {
+                    warn "calling orig with '@rest'";
+                    return $self->$orig($name, @rest);
+                }
+                else {
+                    use Carp;
+                    my $r = $self->$orig($name, \*STDIN, \*STDOUT);
+                    print "\n";
+                    warn $r->readline('Test>');
+                    return $r;
+                }
+            };
+        }
+
 
         $ENV{'PROPHET_REPO'} ||= $ENV{'SD_REPO'} || $ENV{'HOME'}.'/.sd';
-        warn "Prophet repo: ". $ENV{'PROPHET_REPO'};
 
         my $cli = App::SD::CLI->new;
         return $cli->run_one_command(@ARGV);
